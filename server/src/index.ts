@@ -66,6 +66,10 @@ if (clientDist) {
     if (req.path.startsWith('/api') || req.path.startsWith('/storage')) {
       return next();
     }
+    // Prevent returning HTML for missing static assets or files with extensions
+    if (req.path.startsWith('/assets/') || path.extname(req.path)) {
+      return res.status(404).type('text/plain').send('Asset not found');
+    }
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 } else {
