@@ -1,0 +1,558 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500/30 selection:text-indigo-200;
+  }
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Modern Grid & Mesh Background Utilities */
+.bg-grid-pattern {
+  background-size: 36px 36px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+.bg-dots-pattern {
+  background-size: 24px 24px;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+.radial-mask-center {
+  mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+}
+
+.radial-mask-top {
+  mask-image: radial-gradient(circle at 50% 0%, black 50%, transparent 90%);
+  -webkit-mask-image: radial-gradient(circle at 50% 0%, black 50%, transparent 90%);
+}
+
+/* Glassmorphism Surface Classes */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.35) 0%, rgba(15, 23, 42, 0.55) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 12px 40px 0 rgba(99, 102, 241, 0.12), 0 0 0 1px rgba(99, 102, 241, 0.15);
+  transform: translateY(-2px);
+}
+
+.glass-input {
+  background: rgba(11, 15, 25, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* Glowing Aurora Accents */
+.glow-indigo {
+  box-shadow: 0 0 30px -5px rgba(99, 102, 241, 0.25);
+}
+.glow-emerald {
+  box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.25);
+}
+.glow-rose {
+  box-shadow: 0 0 30px -5px rgba(244, 63, 94, 0.25);
+}
+.glow-amber {
+  box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.25);
+}
+.glow-sky {
+  box-shadow: 0 0 30px -5px rgba(14, 165, 233, 0.25);
+}
+
+/* Shimmer Animation */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 2.5s infinite;
+}
+
+/* Neon Badge Helpers with Ambient Halos */
+.badge-get {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.12);
+}
+.badge-post {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.12);
+}
+.badge-put {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.12);
+}
+.badge-patch {
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.12);
+}
+.badge-delete {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.12);
+}
+
+/* =========================================================================
+   Professional Enterprise Dark Theme for Swagger UI
+   ========================================================================= */
+.swagger-dark-wrapper .swagger-ui {
+  color: #e2e8f0;
+  font-family: inherit;
+}
+
+.swagger-dark-wrapper .swagger-ui .wrapper {
+  padding: 0;
+  max-width: 100%;
+}
+
+.swagger-dark-wrapper .swagger-ui .info {
+  margin: 16px 0 24px 0;
+}
+
+.swagger-dark-wrapper .swagger-ui .info .title {
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.025em;
+}
+
+.swagger-dark-wrapper .swagger-ui .info p,
+.swagger-dark-wrapper .swagger-ui .info li,
+.swagger-dark-wrapper .swagger-ui .info table {
+  color: #94a3b8;
+}
+
+.swagger-dark-wrapper .swagger-ui .info a {
+  color: #818cf8;
+}
+
+.swagger-dark-wrapper .swagger-ui .scheme-container {
+  background: #090d16 !important;
+  box-shadow: none !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 14px !important;
+  padding: 16px 20px !important;
+  margin-bottom: 24px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .schemes > label {
+  color: #94a3b8 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .servers-title {
+  color: #94a3b8 !important;
+  font-weight: 600 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-tag-section {
+  margin-bottom: 20px;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-tag {
+  color: #f8fafc !important;
+  border-bottom: 1px solid #1e293b !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  padding: 12px 4px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-tag small {
+  color: #64748b !important;
+  font-weight: 400 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock {
+  background: #0b1120 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+  margin: 0 0 14px 0 !important;
+  border: 1px solid #1e293b !important;
+  overflow: hidden !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock:hover {
+  border-color: #334155 !important;
+}
+
+/* Method Blocks */
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-get {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  background: rgba(16, 185, 129, 0.04) !important;
+}
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-get .opblock-summary-method {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-post {
+  border-color: rgba(59, 130, 246, 0.3) !important;
+  background: rgba(59, 130, 246, 0.04) !important;
+}
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-post .opblock-summary-method {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-put {
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  background: rgba(245, 158, 11, 0.04) !important;
+}
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-put .opblock-summary-method {
+  background: #f59e0b !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-delete {
+  border-color: rgba(244, 63, 94, 0.3) !important;
+  background: rgba(244, 63, 94, 0.04) !important;
+}
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+  background: #f43f5e !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-patch {
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  background: rgba(168, 85, 247, 0.04) !important;
+}
+.swagger-dark-wrapper .swagger-ui .opblock.opblock-patch .opblock-summary-method {
+  background: #a855f7 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-summary-path {
+  color: #f8fafc !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-summary-description {
+  color: #94a3b8 !important;
+  font-size: 12px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-body {
+  background: #050811 !important;
+  border-top: 1px solid #1e293b !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-section-header {
+  background: #0f172a !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid #1e293b !important;
+  padding: 10px 20px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .opblock-section-header h4 {
+  color: #e2e8f0 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+}
+
+/* Parameters & Responses */
+.swagger-dark-wrapper .swagger-ui table.parameters,
+.swagger-dark-wrapper .swagger-ui table.responses-table {
+  background: transparent !important;
+}
+
+.swagger-dark-wrapper .swagger-ui table.parameters th,
+.swagger-dark-wrapper .swagger-ui table.responses-table th {
+  color: #94a3b8 !important;
+  border-bottom: 1px solid #1e293b !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.swagger-dark-wrapper .swagger-ui table.parameters td,
+.swagger-dark-wrapper .swagger-ui table.responses-table td {
+  color: #cbd5e1 !important;
+  border-bottom: 1px solid #1e293b !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .parameter__name {
+  color: #f8fafc !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .parameter__type {
+  color: #818cf8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 12px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .parameter__in {
+  color: #64748b !important;
+  font-size: 11px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .response-col_status {
+  color: #38bdf8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-weight: 700 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .response-col_description {
+  color: #cbd5e1 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .responses-inner {
+  background: #050811 !important;
+  padding: 16px 20px !important;
+}
+
+/* Forms & Inputs */
+.swagger-dark-wrapper .swagger-ui input[type=text],
+.swagger-dark-wrapper .swagger-ui input[type=password],
+.swagger-dark-wrapper .swagger-ui input[type=search],
+.swagger-dark-wrapper .swagger-ui select,
+.swagger-dark-wrapper .swagger-ui textarea {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  transition: all 0.2s !important;
+}
+
+.swagger-dark-wrapper .swagger-ui input[type=text]:focus,
+.swagger-dark-wrapper .swagger-ui select:focus,
+.swagger-dark-wrapper .swagger-ui textarea:focus {
+  border-color: #6366f1 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
+}
+
+/* Buttons */
+.swagger-dark-wrapper .swagger-ui .btn {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  border: 1px solid #334155 !important;
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  box-shadow: none !important;
+  transition: all 0.2s !important;
+  cursor: pointer !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn:hover {
+  background: #334155 !important;
+  border-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.execute {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;
+  border-color: #6366f1 !important;
+  color: #ffffff !important;
+  padding: 8px 24px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.execute:hover {
+  background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%) !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.try-out__btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+  padding: 6px 14px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.try-out__btn:hover {
+  background: #334155 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.authorize {
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+  font-weight: 700 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.authorize:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .btn.authorize svg {
+  fill: #34d399 !important;
+}
+
+/* Code Highlights and Models */
+.swagger-dark-wrapper .swagger-ui .highlight-code,
+.swagger-dark-wrapper .swagger-ui .microlight {
+  background: #020617 !important;
+  border-radius: 8px !important;
+  border: 1px solid #1e293b !important;
+  color: #f1f5f9 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  padding: 12px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .model-box {
+  background: #0b1120 !important;
+  border-radius: 10px !important;
+  border: 1px solid #1e293b !important;
+  padding: 12px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .model {
+  color: #cbd5e1 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .model-title {
+  color: #f8fafc !important;
+  font-weight: 600 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .prop-type {
+  color: #818cf8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .prop-name {
+  color: #38bdf8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Modals & Dialogs */
+.swagger-dark-wrapper .swagger-ui .dialog-ux .backdrop-ux {
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .dialog-ux .modal-ux {
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
+  color: #f8fafc !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .dialog-ux .modal-ux-header {
+  border-bottom: 1px solid #1e293b !important;
+  padding: 16px 20px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .dialog-ux .modal-ux-header h3 {
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .dialog-ux .modal-ux-content {
+  color: #cbd5e1 !important;
+  padding: 20px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .auth-container {
+  border-bottom: 1px solid #1e293b !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .auth-container h4 {
+  color: #f8fafc !important;
+}
+
+.swagger-dark-wrapper .swagger-ui section.models {
+  border: 1px solid #1e293b !important;
+  border-radius: 14px !important;
+  background: #090d16 !important;
+  margin-top: 24px !important;
+}
+
+.swagger-dark-wrapper .swagger-ui section.models h4 {
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+  border-bottom: 1px solid #1e293b !important;
+}
+
+.swagger-dark-wrapper .swagger-ui .topbar {
+  display: none !important;
+}
+

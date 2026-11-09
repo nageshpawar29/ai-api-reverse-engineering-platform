@@ -1,0 +1,298 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 1. TENANCY & ACCESS CONTROL (Zero-Trust Identity)
+// ==========================================
+
+model Tenant {
+  id              String      @id @default(uuid())
+  name            String
+  slug            String      @unique
+  tier            String      @default("PRO") // FREE, PRO, ENTERPRISE
+  customDomain    String?     @unique
+  settings        Json?       // Feature flags, rate limits, theme configuration
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  users           User[]
+  products        Product[]
+  orders          Order[]
+  apiKeys         ApiKey[]
+  auditLogs       AuditLog[]
+  webhooks        WebhookSubscription[]
+
+  @@index([slug, isActive])
+}
+
+model User {
+  id              String      @id @default(uuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email           String      @unique
+  name            String
+  passwordHash    String      // Arg2id / Bcrypt hash
+  role            String      @default("CUSTOMER") // CUSTOMER, STAFF, ADMIN, SUPERADMIN
+  isMfaEnabled    Boolean     @default(false)
+  mfaSecret       String?
+  avatarUrl       String?
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+  version         Int         @default(1) // Optimistic concurrency lock
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  orders          Order[]
+  sessions        Session[]
+  apiKeys         ApiKey[]
+  paymentMethods  PaymentTransaction[]
+  auditLogs       AuditLog[]
+
+  @@index([tenantId, email])
+  @@index([role, isDeleted])
+}
+
+model Session {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash       String      @unique
+  ipAddress       String?
+  userAgent       String?
+  isRevoked       Boolean     @default(false)
+  expiresAt       DateTime
+  createdAt       DateTime    @default(now())
+
+  @@index([userId, isRevoked])
+  @@index([expiresAt])
+}
+
+model ApiKey {
+  id              String      @id @default(uuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  prefix          String      // Public key prefix e.g. "pk_live_..."
+  keyHash         String      @unique // SHA-256 hashed secret
+  scopes          String[]    // ["read:products", "write:orders"]
+  rateLimitTier   Int         @default(1000) // Requests per hour
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+
+  @@index([tenantId, prefix])
+}
+
+// ==========================================
+// 2. COMMERCE & INVENTORY (High-Throughput Catalog)
+// ==========================================
+
+model Category {
+  id              String      @id @default(uuid())
+  parentId        String?
+  parent          Category?   @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children        Category[]  @relation("CategoryHierarchy")
+  name            String
+  slug            String      @unique
+  description     String?
+  icon            String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  products        Product[]
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+model Product {
+  id              String      @id @default(uuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId      String?
+  category        Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sku             String      @unique
+  title           String
+  slug            String
+  description     String?
+  price           Float
+  compareAtPrice  Float?
+  currency        String      @default("USD")
+  stock           Int         @default(0)
+  reservedStock   Int         @default(0) // Concurrency-safe cart reservations
+  status          String      @default("ACTIVE") // DRAFT, ACTIVE, OUT_OF_STOCK, ARCHIVED
+  tags            String[]
+  metadata        Json?       // Custom attributes, specs, variations
+  version         Int         @default(1) // Optimistic locking
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  orderItems      OrderItem[]
+  embeddings      VectorEmbedding[]
+
+  @@index([tenantId, status])
+  @@index([sku])
+  @@index([categoryId, price])
+}
+
+// ==========================================
+// 3. ORDERS & REAL-WORLD CHECKOUT
+// ==========================================
+
+model Order {
+  id              String      @id @default(uuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  orderNumber     String      @unique // e.g. ORD-2026-9042
+  subtotal        Float
+  taxAmount       Float       @default(0.0)
+  shippingAmount  Float       @default(0.0)
+  discountAmount  Float       @default(0.0)
+  totalAmount     Float
+  currency        String      @default("USD")
+  status          String      @default("PENDING") // PENDING, AUTHORIZED, PAID, FULFILLED, CANCELLED, REFUNDED
+  shippingAddress Json
+  billingAddress  Json?
+  idempotencyKey  String?     @unique // Guard against double-charge
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items           OrderItem[]
+  payments        PaymentTransaction[]
+  invoices        Invoice[]
+
+  @@index([tenantId, status])
+  @@index([userId, createdAt])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id              String      @id @default(uuid())
+  orderId         String
+  order           Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id])
+  quantity        Int         @default(1)
+  unitPrice       Float
+  discountAmount  Float       @default(0.0)
+  totalPrice      Float
+  createdAt       DateTime    @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// ==========================================
+// 4. FINANCIAL LEDGER & AUDITED TRANSACTIONS
+// ==========================================
+
+model PaymentTransaction {
+  id              String      @id @default(uuid())
+  orderId         String
+  order           Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  idempotencyKey  String      @unique // Strict payment idempotency
+  provider        String      // STRIPE, PAYPAL, RAZORPAY
+  transactionRef  String?     @unique // Payment gateway reference ID
+  amount          Float
+  feeAmount       Float       @default(0.0)
+  netAmount       Float
+  currency        String      @default("USD")
+  status          String      @default("INITIATED") // INITIATED, SUCCESS, FAILED, REFUNDED, DISPUTED
+  failureReason   String?
+  gatewayPayload  Json?       // Raw gateway callback payload
+  createdAt       DateTime    @default(now())
+
+  @@index([orderId, status])
+  @@index([transactionRef])
+  @@index([createdAt])
+}
+
+model Invoice {
+  id              String      @id @default(uuid())
+  orderId         String
+  order           Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoiceNumber   String      @unique
+  pdfUrl          String?
+  dueAt           DateTime
+  paidAt          DateTime?
+  status          String      @default("ISSUED") // DRAFT, ISSUED, PAID, VOID
+  createdAt       DateTime    @default(now())
+
+  @@index([orderId])
+  @@index([invoiceNumber])
+}
+
+// ==========================================
+// 5. OBSERVABILITY & EVENT AUDITING (SOC2 / GDPR)
+// ==========================================
+
+model AuditLog {
+  id              String      @id @default(uuid())
+  tenantId        String?
+  tenant          Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actorId         String?
+  actor           User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorType       String      @default("USER") // USER, SYSTEM, API_KEY
+  action          String      // e.g. "AUTH_LOGIN", "PRODUCT_UPDATE", "ORDER_REFUND"
+  entityType      String      // "User", "Order", "Product"
+  entityId        String
+  beforeState     Json?       // Change data capture snapshot before modification
+  afterState      Json?       // State snapshot after modification
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+model WebhookSubscription {
+  id              String      @id @default(uuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpointUrl     String
+  secretHash      String
+  subscribedEvents String[]   // ["order.created", "product.stock_low"]
+  isActive        Boolean     @default(true)
+  failureCount    Int         @default(0)
+  lastDeliveredAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([tenantId, isActive])
+}
+
+// ==========================================
+// 6. FUTURISTIC AI & SEMANTIC KNOWLEDGE (pgvector RAG)
+// ==========================================
+
+model VectorEmbedding {
+  id              String      @id @default(uuid())
+  entityType      String      // "PRODUCT", "DOCUMENT", "KNOWLEDGE_BASE"
+  entityId        String
+  product         Product?    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  chunkContent    String      // Chunked text representation
+  embeddingVector String      // 1536-dimensional floating point vector serialization
+  modelVersion    String      @default("text-embedding-3-small")
+  tokenCount      Int         @default(0)
+  similarityMetric String     @default("COSINE") // COSINE, DOT_PRODUCT, EUCLIDEAN
+  createdAt       DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([modelVersion])
+}

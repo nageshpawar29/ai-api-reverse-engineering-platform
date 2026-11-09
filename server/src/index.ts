@@ -1,0 +1,116 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import { db } from './db/index.js';
+import { healthRouter } from './routes/health.js';
+import { projectsRouter } from './routes/projects.js';
+import { analysisRouter } from './routes/analysis.js';
+import { artifactsRouter } from './routes/artifacts.js';
+import { chatRouter } from './routes/chat.js';
+import { errorHandler } from './middleware/errorHandler.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5001;
+
+// CORS setup
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl)
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        callback(new Error('Blocked by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Static route for uploaded/extracted project files if needed
+const storageDir = path.resolve(process.cwd(), process.env.STORAGE_DIR || './storage/uploads');
+app.use('/storage', express.static(storageDir));
+
+// Route registrations
+app.use('/api/health', healthRouter);
+app.use('/api/projects', projectsRouter);
+app.use('/api/analysis', analysisRouter);
+app.use('/api/artifacts', artifactsRouter);
+app.use('/api/chat', chatRouter);
+
+// Serve frontend client build in production or when client/dist exists
+const clientDistCandidates = [
+  path.resolve(process.cwd(), 'client', 'dist'),
+  path.resolve(process.cwd(), '..', 'client', 'dist'),
+];
+const clientDist = clientDistCandidates.find((dir) => fs.existsSync(dir));
+
+if (clientDist) {
+  console.log(`📦 Serving static client build from: ${clientDist}`);
+  app.use(express.static(clientDist));
+
+  // Catch-all route to support client-side routing (React Router)
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/storage')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  // Fallback API greeting when client is not built yet
+  app.get('/', (req, res) => {
+    res.json({
+      name: 'AI API Reverse-Engineering Platform Backend',
+      version: '1.0.0',
+      documentation: '/api/health',
+      status: 'online',
+    });
+  });
+}
+
+// Centralized error handling
+app.use(errorHandler);
+
+// Start server
+async function startServer() {
+  try {
+    await db.initialize();
+    const server = app.listen(PORT, () => {
+      console.log(`=======================================================`);
+      console.log(`🚀 Reverse API Engine Server listening on port ${PORT}`);
+      console.log(`   Health check: http://localhost:${PORT}/api/health`);
+      console.log(`=======================================================`);
+    });
+
+    const shutdown = () => {
+      console.log('Shutting down server gracefully...');
+      server.close(() => {
+        console.log('Server stopped.');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+}
+
+startServer();
+
+export default app;
