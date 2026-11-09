@@ -35,6 +35,20 @@ Thumbs.db
 *.swp
 *.swo
 
-# Archives (don't push zip back into git)
+# Archives & Temporary files
 *.zip
 *.tar.gz
+*.rar
+*.7z
+
+# Documents, Presentations & Research Papers (kept outside repo)
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+*.tex
+*.png
+*.jpg
+*.jpeg
+*.py
+
