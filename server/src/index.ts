@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { db } from './db/index.js';
 import { healthRouter } from './routes/health.js';
 import { projectsRouter } from './routes/projects.js';
@@ -13,8 +14,11 @@ import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = Number(process.env.PORT) || 5001;
 
 // CORS setup
 const allowedOrigins = [
@@ -42,6 +46,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static route for uploaded/extracted project files if needed
 const storageDir = path.resolve(process.cwd(), process.env.STORAGE_DIR || './storage/uploads');
+if (!fs.existsSync(storageDir)) {
+  fs.mkdirSync(storageDir, { recursive: true });
+}
 app.use('/storage', express.static(storageDir));
 
 // Route registrations
@@ -55,6 +62,8 @@ app.use('/api/chat', chatRouter);
 const clientDistCandidates = [
   path.resolve(process.cwd(), 'client', 'dist'),
   path.resolve(process.cwd(), '..', 'client', 'dist'),
+  path.resolve(__dirname, '..', '..', 'client', 'dist'),
+  path.resolve(__dirname, '..', 'client', 'dist'),
 ];
 const clientDist = clientDistCandidates.find((dir) => fs.existsSync(dir));
 
@@ -88,10 +97,10 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await db.initialize();
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`=======================================================`);
-      console.log(`🚀 Reverse API Engine Server listening on port ${PORT}`);
-      console.log(`   Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🚀 Reverse API Engine Server listening on 0.0.0.0:${PORT}`);
+      console.log(`   Health check: http://0.0.0.0:${PORT}/api/health`);
       console.log(`=======================================================`);
     });
 
