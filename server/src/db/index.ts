@@ -83,9 +83,19 @@ export class DatabaseManager {
     const dbUrl = process.env.DATABASE_URL;
     if (dbUrl && process.env.DB_TYPE !== 'sqlite') {
       try {
+        const isRemote =
+          dbUrl.includes('.render.com') ||
+          dbUrl.includes('.neon.tech') ||
+          dbUrl.includes('.supabase.co') ||
+          dbUrl.includes('pooler.supabase.com') ||
+          dbUrl.includes('.aivencloud.com') ||
+          dbUrl.includes('sslmode=') ||
+          process.env.NODE_ENV === 'production';
+
         this.pgPool = new Pool({
           connectionString: dbUrl,
-          connectionTimeoutMillis: 2000,
+          connectionTimeoutMillis: 10000,
+          ssl: isRemote ? { rejectUnauthorized: false } : undefined,
         });
         const client = await this.pgPool.connect();
         this.isPostgresConnected = true;

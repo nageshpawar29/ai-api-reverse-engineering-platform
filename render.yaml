@@ -1,3 +1,9 @@
+databases:
+  - name: reverse-api-db
+    databaseName: reverse_api
+    user: reverse_user
+    plan: free
+
 services:
   - type: web
     name: ai-api-reverse-engineering
@@ -10,5 +16,10 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reverse-api-db
+          property: connectionString
       - key: GEMINI_API_KEY
         sync: false
+
