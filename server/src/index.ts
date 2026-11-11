@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
@@ -19,6 +20,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
+
+// Enable HTTP Gzip/Deflate compression for fast response times and 75% smaller transfer size
+app.use(compression());
 
 // CORS setup: Permissive origin policy so frontend assets and API endpoints
 // can be requested seamlessly from any host (e.g. Render, custom domains, or localhost)
@@ -59,7 +63,27 @@ const clientDist = clientDistCandidates.find((dir) => fs.existsSync(dir));
 
 if (clientDist) {
   console.log(`📦 Serving static client build from: ${clientDist}`);
-  app.use(express.static(clientDist));
+
+  // 1. Serve hashed static assets (/assets/*) with immutable 1-year browser cache
+  app.use(
+    '/assets',
+    express.static(path.join(clientDist, 'assets'), {
+      maxAge: '1y',
+      immutable: true,
+    })
+  );
+
+  // 2. Serve other static files (favicon, etc.) with 1-hour cache, but never cache index.html
+  app.use(
+    express.static(clientDist, {
+      maxAge: '1h',
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      },
+    })
+  );
 
   // Catch-all route to support client-side routing (React Router)
   app.get('*', (req, res, next) => {
@@ -70,6 +94,7 @@ if (clientDist) {
     if (req.path.startsWith('/assets/') || path.extname(req.path)) {
       return res.status(404).type('text/plain').send('Asset not found');
     }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 } else {
