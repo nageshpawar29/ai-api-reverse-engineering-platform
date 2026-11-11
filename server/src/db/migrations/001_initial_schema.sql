@@ -178,3 +178,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 INSERT INTO users (id, name, email) 
 VALUES ('default-user-id', 'Lead Developer', 'developer@reverse-api.local')
 ON CONFLICT (id) DO NOTHING;
+
+-- Auxiliary columns for 100% full-fidelity JSON object persistence
+ALTER TABLE api_endpoints ADD COLUMN IF NOT EXISTS raw_data JSONB;
+ALTER TABLE models ADD COLUMN IF NOT EXISTS raw_data JSONB;
+ALTER TABLE dependencies ADD COLUMN IF NOT EXISTS raw_data JSONB;
+ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS raw_data JSONB;
+
