@@ -11,18 +11,26 @@ export class DatabaseAnalyzer {
   ): Promise<DatabaseModel[]> {
     const models: DatabaseModel[] = [];
 
-    // Check for Prisma schema
+    // 1. Check for Prisma schema anywhere in the repository
     const prismaSchemaPath = this.findPrismaSchema(projectDir);
     if (prismaSchemaPath && fs.existsSync(prismaSchemaPath)) {
       const prismaModels = this.parsePrismaSchema(prismaSchemaPath, projectDir, projectId);
       models.push(...prismaModels);
     }
 
-    // Check for Mongoose / TypeORM / Sequelize models in source files
+    // 2. Check for Mongoose / TypeORM / Sequelize models in source files
     const codeModels = this.parseCodeModels(projectDir, projectId, allFiles);
     for (const cm of codeModels) {
       if (!models.some((m) => m.name.toLowerCase() === cm.name.toLowerCase())) {
         models.push(cm);
+      }
+    }
+
+    // 3. Check for SQL files (migrations, ddl, schema.sql)
+    const sqlModels = this.parseSqlFiles(projectDir, projectId, allFiles);
+    for (const sm of sqlModels) {
+      if (!models.some((m) => m.name.toLowerCase() === sm.name.toLowerCase())) {
+        models.push(sm);
       }
     }
 
@@ -34,11 +42,115 @@ export class DatabaseAnalyzer {
       path.join(projectDir, 'prisma', 'schema.prisma'),
       path.join(projectDir, 'schema.prisma'),
       path.join(projectDir, 'src', 'prisma', 'schema.prisma'),
+      path.join(projectDir, 'server', 'prisma', 'schema.prisma'),
+      path.join(projectDir, 'backend', 'prisma', 'schema.prisma'),
+      path.join(projectDir, 'packages', 'db', 'prisma', 'schema.prisma'),
+      path.join(projectDir, 'packages', 'database', 'prisma', 'schema.prisma'),
     ];
     for (const c of candidates) {
       if (fs.existsSync(c)) return c;
     }
-    return null;
+
+    // Recursive search for any *.prisma file
+    const found: string[] = [];
+    const walk = (dir: string, depth = 0) => {
+      if (depth > 5 || found.length > 0 || !fs.existsSync(dir)) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const e of entries) {
+          if (found.length > 0) return;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) {
+            if (!['node_modules', '.git', 'dist', 'build', '.next'].includes(e.name)) {
+              walk(full, depth + 1);
+            }
+          } else if (e.name.endsWith('.prisma')) {
+            found.push(full);
+            return;
+          }
+        }
+      } catch (err) {}
+    };
+    walk(projectDir);
+    return found.length > 0 ? found[0] : null;
+  }
+
+  private static parseSqlFiles(
+    projectDir: string,
+    projectId: string,
+    allFiles: string[]
+  ): DatabaseModel[] {
+    const models: DatabaseModel[] = [];
+    const sqlFiles = allFiles.filter((f) => f.endsWith('.sql'));
+
+    for (const filePath of sqlFiles) {
+      try {
+        const sql = fs.readFileSync(filePath, 'utf-8');
+        const relPath = path.relative(projectDir, filePath);
+        const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([a-zA-Z0-9_]+)["`]?\s*\(([\s\S]*?)\);/gi;
+        let match;
+
+        while ((match = tableRegex.exec(sql)) !== null) {
+          const tableName = match[1];
+          const body = match[2];
+          const fields: ModelField[] = [];
+
+          const colLines = body.split(',\n');
+          for (const line of colLines) {
+            const trimmed = line.trim();
+            if (
+              !trimmed ||
+              trimmed.startsWith('PRIMARY KEY') ||
+              trimmed.startsWith('FOREIGN KEY') ||
+              trimmed.startsWith('CONSTRAINT') ||
+              trimmed.startsWith('INDEX') ||
+              trimmed.startsWith('UNIQUE')
+            ) {
+              continue;
+            }
+
+            const colMatch = trimmed.match(/^["`]?([a-zA-Z0-9_]+)["`]?\s+([A-Za-z0-9_()]+)/);
+            if (colMatch) {
+              const colName = colMatch[1];
+              const colType = colMatch[2];
+              const isPrimary = trimmed.toUpperCase().includes('PRIMARY KEY') || colName.toLowerCase() === 'id';
+              const isUnique = trimmed.toUpperCase().includes('UNIQUE') || isPrimary;
+              const isNullable = !trimmed.toUpperCase().includes('NOT NULL');
+
+              fields.push({
+                id: `field-${uuidv4().substring(0, 8)}`,
+                modelId: '',
+                name: colName,
+                fieldType: colType.toLowerCase(),
+                isPrimaryKey: isPrimary,
+                isNullable,
+                isUnique,
+                isIndexed: isPrimary || isUnique || colName.endsWith('_id'),
+                foreignKeyTarget: colName.endsWith('_id') ? colName.replace(/_id$/, '') : undefined,
+              });
+            }
+          }
+
+          if (fields.length > 0 && !models.some((m) => m.name.toLowerCase() === tableName.toLowerCase())) {
+            models.push({
+              id: `model-${uuidv4().substring(0, 8)}`,
+              projectId,
+              name: tableName,
+              tableName,
+              ormType: 'sql',
+              sourceFile: relPath,
+              description: `Relational SQL Table: ${tableName}`,
+              detectionType: 'DETECTED',
+              domain: this.assignDomain(tableName),
+              fields,
+              createdAt: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    return models;
   }
 
   private static assignDomain(

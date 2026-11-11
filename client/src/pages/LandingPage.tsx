@@ -31,10 +31,14 @@ export const LandingPage: React.FC = () => {
 
   const supportedFrameworks = [
     { name: 'Node.js / Express', badge: 'v4.x - v5.x', color: 'from-emerald-500/20 to-emerald-700/10 text-emerald-300 border-emerald-500/30' },
+    { name: 'Next.js & Nuxt', badge: 'App & Pages Route Handlers', color: 'from-slate-500/20 to-slate-700/10 text-slate-300 border-slate-500/30' },
     { name: 'Python FastAPI & Flask', badge: 'Pydantic & ASGI', color: 'from-blue-500/20 to-blue-700/10 text-blue-300 border-blue-500/30' },
     { name: 'Python Django REST', badge: 'DRF Serializers', color: 'from-teal-500/20 to-teal-700/10 text-teal-300 border-teal-500/30' },
     { name: 'Go Gin & Fiber', badge: 'Static Struct AST', color: 'from-cyan-500/20 to-cyan-700/10 text-cyan-300 border-cyan-500/30' },
     { name: 'Java Spring Boot', badge: 'REST Controller & JPA', color: 'from-orange-500/20 to-orange-700/10 text-orange-300 border-orange-500/30' },
+    { name: 'PHP Laravel & Symfony', badge: 'Eloquent & Route Facades', color: 'from-indigo-500/20 to-indigo-700/10 text-indigo-300 border-indigo-500/30' },
+    { name: 'C# / ASP.NET Core', badge: 'EF Core & Minimal APIs', color: 'from-purple-500/20 to-purple-700/10 text-purple-300 border-purple-500/30' },
+    { name: 'Universal SQL & AST', badge: 'Polyglot Heuristic Fallback', color: 'from-amber-500/20 to-amber-700/10 text-amber-300 border-amber-500/30' },
   ];
 
   return (
@@ -101,9 +105,9 @@ export const LandingPage: React.FC = () => {
               <div className="text-[11px] text-slate-400 mt-1">Parses code without executing or running untrusted scripts</div>
             </div>
             <div className="p-4 rounded-xl bg-slate-900/50 border border-white/[0.06] backdrop-blur-sm">
-              <div className="text-2xl font-extrabold text-white">4+</div>
-              <div className="text-xs font-semibold text-sky-300 mt-0.5">Backend Frameworks</div>
-              <div className="text-[11px] text-slate-400 mt-1">Express, FastAPI, Django, Gin, Spring Boot</div>
+              <div className="text-2xl font-extrabold text-white">9+</div>
+              <div className="text-xs font-semibold text-sky-300 mt-0.5">Frameworks & Languages</div>
+              <div className="text-[11px] text-slate-400 mt-1">Node/Express, Next.js, Python, Go, Java, PHP, C#/.NET, SQL</div>
             </div>
             <div className="p-4 rounded-xl bg-slate-900/50 border border-white/[0.06] backdrop-blur-sm">
               <div className="text-2xl font-extrabold text-white">OpenAPI 3.0</div>

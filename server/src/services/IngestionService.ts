@@ -25,6 +25,51 @@ export class IngestionService {
   }
 
   /**
+   * Automatically unwraps single-folder archive wrappers (e.g. GitHub repo-main/)
+   * so project files sit directly at the root of targetDir.
+   */
+  public static normalizeExtractedDirectory(targetDir: string): string {
+    if (!fs.existsSync(targetDir)) return targetDir;
+
+    let depth = 0;
+    while (depth < 3) {
+      try {
+        const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+        const validEntries = entries.filter(
+          (e) => e.name !== '.DS_Store' && e.name !== '__MACOSX' && !e.name.startsWith('._')
+        );
+
+        if (validEntries.length === 1 && validEntries[0].isDirectory()) {
+          const nestedDir = path.join(targetDir, validEntries[0].name);
+          const nestedEntries = fs.readdirSync(nestedDir);
+
+          for (const entry of nestedEntries) {
+            const src = path.join(nestedDir, entry);
+            const dest = path.join(targetDir, entry);
+            if (fs.existsSync(dest)) {
+              fs.rmSync(dest, { recursive: true, force: true });
+            }
+            fs.renameSync(src, dest);
+          }
+
+          try {
+            fs.rmdirSync(nestedDir);
+          } catch (e) {}
+
+          depth++;
+        } else {
+          break;
+        }
+      } catch (err) {
+        console.warn(`Directory normalization warning for ${targetDir}:`, err);
+        break;
+      }
+    }
+
+    return targetDir;
+  }
+
+  /**
    * Safe ZIP extraction preventing Zip Slip vulnerabilities
    */
   public static async extractZipSafely(zipFilePath: string, targetDir: string): Promise<void> {
@@ -57,6 +102,9 @@ export class IngestionService {
         fs.writeFileSync(destinationPath, entry.getData());
       }
     }
+
+    // Automatically unwrap single-directory wrapper
+    this.normalizeExtractedDirectory(targetDir);
   }
 
   /**
@@ -158,36 +206,82 @@ export class IngestionService {
     const projectId = `proj-${uuidv4().substring(0, 8)}`;
     const targetPath = path.join(extractDir, projectId);
 
-    // Security validation on Git URL
+    // Clean and validate URL
+    let cleanUrl = repoUrl.trim().replace(/\.git$/i, '').replace(/\/$/, '');
+    let resolvedBranch = (branch || 'main').trim();
+
+    // Check if user pasted a specific branch in URL like /tree/develop
+    const treeMatch = cleanUrl.match(/^(https:\/\/github\.com\/[^\/]+\/[^\/]+)\/tree\/([^\/]+)/);
+    if (treeMatch) {
+      cleanUrl = treeMatch[1];
+      resolvedBranch = treeMatch[2];
+    }
+
     const urlPattern = /^https:\/\/github\.com\/[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+$/;
-    const cleanUrl = repoUrl.replace(/\.git$/i, '');
     if (!urlPattern.test(cleanUrl)) {
       throw new Error('Only valid public https://github.com/owner/repo URLs are accepted.');
     }
 
     const repoName = cleanUrl.split('/').pop() || 'git-repo';
-
-    // Download GitHub archive tarball/zip
-    const archiveUrl = `${cleanUrl}/archive/refs/heads/${branch}.zip`;
     const tempZipPath = path.join(extractDir, `${projectId}.zip`);
 
-    try {
-      const response = await axios.get(archiveUrl, { responseType: 'arraybuffer', timeout: 30000 });
-      fs.writeFileSync(tempZipPath, response.data);
-      await this.extractZipSafely(tempZipPath, targetPath);
-      if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
-    } catch (downloadErr: any) {
-      // Fallback: If master branch or download failed, record helpful error
+    // Candidate archive URLs in order of preference
+    const candidateUrls: string[] = [];
+    if (resolvedBranch && resolvedBranch !== 'main' && resolvedBranch !== 'HEAD') {
+      candidateUrls.push(`${cleanUrl}/archive/refs/heads/${resolvedBranch}.zip`);
+    }
+    candidateUrls.push(
+      `${cleanUrl}/archive/HEAD.zip`,
+      `${cleanUrl}/archive/refs/heads/main.zip`,
+      `${cleanUrl}/archive/refs/heads/master.zip`
+    );
+
+    let downloaded = false;
+    let lastError: any = null;
+
+    for (const archiveUrl of candidateUrls) {
+      try {
+        const response = await axios.get(archiveUrl, {
+          responseType: 'arraybuffer',
+          timeout: 45000,
+          maxRedirects: 5,
+          headers: {
+            'User-Agent': 'AI-Reverse-Engineering-Platform/1.0',
+            'Accept': 'application/zip, application/octet-stream, */*',
+          },
+        });
+
+        if (response.data && response.data.byteLength > 100) {
+          fs.writeFileSync(tempZipPath, response.data);
+          downloaded = true;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+
+    if (!downloaded || !fs.existsSync(tempZipPath)) {
       throw new Error(
-        `Failed to download GitHub archive for ${cleanUrl} (branch: ${branch}). Verify the repository and branch name.`
+        `Failed to download GitHub archive for ${cleanUrl}. Verify the repository is public and accessible. Details: ${lastError?.message || 'Download failed'}`
       );
+    }
+
+    try {
+      await this.extractZipSafely(tempZipPath, targetPath);
+    } finally {
+      if (fs.existsSync(tempZipPath)) {
+        try {
+          fs.unlinkSync(tempZipPath);
+        } catch (e) {}
+      }
     }
 
     const project: Project = {
       id: projectId,
       userId: 'default-user-id',
       name: projectName || repoName,
-      description: `Cloned from GitHub: ${cleanUrl} (${branch})`,
+      description: `Cloned from GitHub: ${cleanUrl} (${resolvedBranch})`,
       framework: 'express',
       language: 'typescript',
       sourceType: 'github',
@@ -216,6 +310,9 @@ export class IngestionService {
    */
   public static async runAnalysisPipeline(projectId: string, projectDir: string): Promise<void> {
     try {
+      // 0. Ensure target directory is properly normalized and unwrapped
+      this.normalizeExtractedDirectory(projectDir);
+
       await db.updateProjectStatus(projectId, {
         status: 'analyzing',
         currentStep: 'Detecting framework & language architecture',
@@ -235,12 +332,31 @@ export class IngestionService {
       const analyzer = AnalyzerFactory.getAnalyzer(detection.language, detection.framework);
       let rawResult = await analyzer.analyze(projectDir, projectId);
 
-      // Polyglot fallback: if specialized analyzer found 0 routes, scan other language engines
-      if (rawResult.endpoints.length === 0) {
+      // Polyglot fallback: if specialized analyzer found 0 routes OR 0 models, scan other language engines
+      if (rawResult.endpoints.length === 0 || rawResult.models.length === 0) {
         const polyglotResult = await AnalyzerFactory.analyzePolyglot(projectDir, projectId);
-        if (polyglotResult.endpoints.length > 0) {
-          rawResult = polyglotResult;
+        if (rawResult.endpoints.length === 0 && polyglotResult.endpoints.length > 0) {
+          rawResult.endpoints = polyglotResult.endpoints;
+        } else if (polyglotResult.endpoints.length > 0) {
+          for (const ep of polyglotResult.endpoints) {
+            if (!rawResult.endpoints.some((e) => e.method === ep.method && e.path === ep.path)) {
+              rawResult.endpoints.push(ep);
+            }
+          }
         }
+
+        if (rawResult.models.length === 0 && polyglotResult.models.length > 0) {
+          rawResult.models = polyglotResult.models;
+        } else if (polyglotResult.models.length > 0) {
+          for (const m of polyglotResult.models) {
+            if (!rawResult.models.some((em) => em.name.toLowerCase() === m.name.toLowerCase())) {
+              rawResult.models.push(m);
+            }
+          }
+        }
+
+        rawResult.dependencies.push(...polyglotResult.dependencies);
+        rawResult.securityFindings.push(...polyglotResult.securityFindings);
       }
 
       await db.updateProjectStatus(projectId, {

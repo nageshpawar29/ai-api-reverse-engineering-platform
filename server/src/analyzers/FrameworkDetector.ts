@@ -149,7 +149,31 @@ export class FrameworkDetector {
       return { framework, language, confidence, details };
     }
 
-    // 5. Check Node.js / JavaScript / TypeScript Ecosystem (package.json)
+    // 5. Check C# / .NET Ecosystem (*.csproj, *.sln, *.cs)
+    const hasCsproj = this.hasFilesWithExtension(projectDir, ['.csproj', '.sln']);
+    const hasCsFiles = hasCsproj || this.hasFilesWithExtension(projectDir, ['.cs']);
+
+    if (hasCsFiles) {
+      language = 'csharp';
+      framework = 'aspnetcore';
+      confidence = 0.95;
+      details.push('Detected C# / ASP.NET Core project files');
+      return { framework, language, confidence, details };
+    }
+
+    // 6. Check Ruby Ecosystem (Gemfile, *.rb)
+    const hasGemfile = fs.existsSync(path.join(projectDir, 'Gemfile'));
+    const hasRubyFiles = hasGemfile || this.hasFilesWithExtension(projectDir, ['.rb']);
+
+    if (hasRubyFiles) {
+      language = 'ruby';
+      framework = 'rails';
+      confidence = 0.9;
+      details.push('Detected Ruby / Rails repository');
+      return { framework, language, confidence, details };
+    }
+
+    // 7. Check Node.js / JavaScript / TypeScript Ecosystem (package.json)
     const packageJsonPath = path.join(projectDir, 'package.json');
     if (fs.existsSync(packageJsonPath)) {
       language = 'javascript';
@@ -160,7 +184,11 @@ export class FrameworkDetector {
           ...(pkg.devDependencies || {}),
         };
 
-        if (allDeps['express']) {
+        if (allDeps['next'] || fs.existsSync(path.join(projectDir, 'next.config.js')) || fs.existsSync(path.join(projectDir, 'next.config.mjs')) || fs.existsSync(path.join(projectDir, 'next.config.ts'))) {
+          framework = 'nextjs';
+          confidence = 0.95;
+          details.push('Detected Next.js full-stack framework');
+        } else if (allDeps['express']) {
           framework = 'express';
           confidence = 0.95;
           details.push('Detected "express" dependency in package.json');
