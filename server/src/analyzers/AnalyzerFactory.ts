@@ -5,6 +5,9 @@ import { GoAnalyzer } from './go/GoAnalyzer.js';
 import { JavaAnalyzer } from './java/JavaAnalyzer.js';
 import { PhpAnalyzer } from './php/PhpAnalyzer.js';
 import { DotNetAnalyzer } from './dotnet/DotNetAnalyzer.js';
+import { RubyAnalyzer } from './ruby/RubyAnalyzer.js';
+import { NestJsAnalyzer } from './nestjs/NestJsAnalyzer.js';
+import { RustAnalyzer } from './rust/RustAnalyzer.js';
 import { UniversalAnalyzer } from './universal/UniversalAnalyzer.js';
 
 export class AnalyzerFactory {
@@ -13,7 +16,7 @@ export class AnalyzerFactory {
     const fw = (framework || '').toLowerCase();
 
     // 1. Python Ecosystem
-    if (lang === 'python' || ['fastapi', 'flask', 'django'].includes(fw)) {
+    if (lang === 'python' || ['fastapi', 'flask', 'django', 'django-rest'].includes(fw)) {
       return new PythonAnalyzer();
     }
 
@@ -42,23 +45,41 @@ export class AnalyzerFactory {
       return new DotNetAnalyzer();
     }
 
-    // 6. Default Node.js / TypeScript / Express Ecosystem
+    // 6. Ruby Ecosystem
+    if (lang === 'ruby' || ['rails', 'sinatra'].includes(fw)) {
+      return new RubyAnalyzer();
+    }
+
+    // 7. Rust Ecosystem
+    if (lang === 'rust' || ['axum', 'actix-web', 'rocket'].includes(fw)) {
+      return new RustAnalyzer();
+    }
+
+    // 8. NestJS (TypeScript)
+    if (fw === 'nestjs') {
+      return new NestJsAnalyzer();
+    }
+
+    // 9. Default Node.js / TypeScript / Express Ecosystem
     return new ExpressAnalyzer();
   }
 
   /**
    * Universal Polyglot Analyzer: Runs multi-language endpoint & model discovery
    * across any repository that mixes services (e.g. Node + Python + Go microservices,
-   * PHP, .NET, Next.js, or raw SQL tables).
+   * PHP, .NET, Ruby, Rust, Next.js, or raw SQL tables).
    */
   public static async analyzePolyglot(projectDir: string, projectId: string): Promise<AnalysisEngineResult> {
     const analyzers: FrameworkAnalyzer[] = [
+      new NestJsAnalyzer(),
       new ExpressAnalyzer(),
       new PythonAnalyzer(),
       new GoAnalyzer(),
       new JavaAnalyzer(),
       new PhpAnalyzer(),
       new DotNetAnalyzer(),
+      new RubyAnalyzer(),
+      new RustAnalyzer(),
     ];
 
     const aggregatedResult: AnalysisEngineResult = {

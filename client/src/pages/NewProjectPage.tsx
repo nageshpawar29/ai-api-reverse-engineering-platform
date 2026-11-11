@@ -145,7 +145,7 @@ export const NewProjectPage: React.FC = () => {
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">Import Backend Project</h1>
           <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-            Upload an existing backend directory as a ZIP file or provide any public GitHub repository link. Supports Node.js, Next.js, Python (FastAPI/Flask/Django), Go (Gin/Fiber), Java (Spring Boot), PHP (Laravel), C# (.NET Core), and raw SQL tables with zero untrusted code execution.
+            Upload an existing backend directory as a ZIP file or provide any public GitHub repository link. Supports PHP (Laravel / Symfony), TypeScript (NestJS / Express / Next.js), Python (FastAPI / Flask / Django REST), Ruby on Rails, Rust (Axum / Actix), Go (Gin / Fiber), Java (Spring Boot), C# (.NET Core), and raw SQL tables with zero untrusted code execution.
           </p>
         </div>
 

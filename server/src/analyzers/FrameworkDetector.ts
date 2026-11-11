@@ -173,7 +173,35 @@ export class FrameworkDetector {
       return { framework, language, confidence, details };
     }
 
-    // 7. Check Node.js / JavaScript / TypeScript Ecosystem (package.json)
+    // 7. Check Rust Ecosystem (Cargo.toml, *.rs)
+    const hasCargo = fs.existsSync(path.join(projectDir, 'Cargo.toml'));
+    const hasRustFiles = hasCargo || this.hasFilesWithExtension(projectDir, ['.rs']);
+
+    if (hasRustFiles) {
+      language = 'rust';
+      let cargoText = '';
+      if (hasCargo) {
+        try { cargoText = fs.readFileSync(path.join(projectDir, 'Cargo.toml'), 'utf-8').toLowerCase(); } catch (e) {}
+      }
+
+      if (cargoText.includes('actix-web')) {
+        framework = 'actix-web';
+        confidence = 0.95;
+        details.push('Detected Rust Actix-web framework');
+      } else if (cargoText.includes('rocket')) {
+        framework = 'rocket';
+        confidence = 0.95;
+        details.push('Detected Rust Rocket framework');
+      } else {
+        framework = 'axum';
+        confidence = 0.95;
+        details.push('Detected Rust Axum / async HTTP framework');
+      }
+
+      return { framework, language, confidence, details };
+    }
+
+    // 8. Check Node.js / JavaScript / TypeScript Ecosystem (package.json)
     const packageJsonPath = path.join(projectDir, 'package.json');
     if (fs.existsSync(packageJsonPath)) {
       language = 'javascript';
@@ -184,22 +212,23 @@ export class FrameworkDetector {
           ...(pkg.devDependencies || {}),
         };
 
-        if (allDeps['next'] || fs.existsSync(path.join(projectDir, 'next.config.js')) || fs.existsSync(path.join(projectDir, 'next.config.mjs')) || fs.existsSync(path.join(projectDir, 'next.config.ts'))) {
+        if (allDeps['@nestjs/core'] || allDeps['@nestjs/common']) {
+          framework = 'nestjs';
+          language = 'typescript';
+          confidence = 0.95;
+          details.push('Detected NestJS enterprise framework in package.json');
+        } else if (allDeps['next'] || fs.existsSync(path.join(projectDir, 'next.config.js')) || fs.existsSync(path.join(projectDir, 'next.config.mjs')) || fs.existsSync(path.join(projectDir, 'next.config.ts'))) {
           framework = 'nextjs';
           confidence = 0.95;
           details.push('Detected Next.js full-stack framework');
-        } else if (allDeps['express']) {
-          framework = 'express';
-          confidence = 0.95;
-          details.push('Detected "express" dependency in package.json');
         } else if (allDeps['fastify']) {
           framework = 'fastify';
           confidence = 0.92;
           details.push('Detected "fastify" dependency in package.json');
-        } else if (allDeps['@nestjs/core']) {
-          framework = 'nestjs';
-          confidence = 0.92;
-          details.push('Detected "@nestjs/core" dependency in package.json');
+        } else if (allDeps['express']) {
+          framework = 'express';
+          confidence = 0.95;
+          details.push('Detected "express" dependency in package.json');
         } else if (allDeps['koa']) {
           framework = 'koa';
           confidence = 0.9;

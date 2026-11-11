@@ -306,6 +306,71 @@ export class PythonAnalyzer implements FrameworkAnalyzer {
           createdAt: new Date().toISOString(),
         });
       }
+
+      // 4. Django REST Framework Router: router.register(r'users', UserViewSet)
+      const drfRouterRegex = /router\.register\s*\(\s*r?["']([^"']+)["']\s*,\s*([a-zA-Z0-9_]+)/i;
+      const drfMatch = line.match(drfRouterRegex);
+      if (drfMatch) {
+        const resource = drfMatch[1].replace(/^\//, '').replace(/\/$/, '');
+        const viewSet = drfMatch[2];
+        const resourcePath = this.normalizePath(mountPrefix + '/' + resource);
+
+        const drfActions: Array<{ method: HttpMethod; subpath: string; action: string }> = [
+          { method: 'GET', subpath: resourcePath, action: 'list' },
+          { method: 'POST', subpath: resourcePath, action: 'create' },
+          { method: 'GET', subpath: `${resourcePath}/{id}`, action: 'retrieve' },
+          { method: 'PUT', subpath: `${resourcePath}/{id}`, action: 'update' },
+          { method: 'PATCH', subpath: `${resourcePath}/{id}`, action: 'partial_update' },
+          { method: 'DELETE', subpath: `${resourcePath}/{id}`, action: 'destroy' },
+        ];
+
+        for (const act of drfActions) {
+          endpoints.push({
+            id: `ep-${uuidv4().substring(0, 8)}`,
+            projectId,
+            method: act.method,
+            path: act.subpath,
+            summary: `DRF ${viewSet}.${act.action} -> ${act.method} ${act.subpath}`,
+            description: `Django REST Framework ModelViewSet action ${viewSet}::${act.action}`,
+            purpose: `Handles ${act.action} operation on ${resource}`,
+            controllerName: viewSet,
+            handlerFunction: act.action,
+            sourceFile: relativePath,
+            lineStart: i + 1,
+            lineEnd: i + 1,
+            authRequired: act.method !== 'GET',
+            authType: act.method !== 'GET' ? 'Session / Token' : undefined,
+            detectionType: 'DETECTED',
+            confidenceScore: 0.95,
+            parameters: act.subpath.includes('{id}')
+              ? [
+                  {
+                    id: `param-${uuidv4().substring(0, 8)}`,
+                    endpointId: '',
+                    name: 'id',
+                    paramIn: 'path',
+                    dataType: 'string',
+                    required: true,
+                    description: 'Resource ID',
+                    detectionType: 'DETECTED',
+                  },
+                ]
+              : [],
+            responses: [
+              {
+                id: `res-${uuidv4().substring(0, 8)}`,
+                endpointId: '',
+                statusCode: act.method === 'POST' ? 201 : 200,
+                description: 'JSON result',
+                contentType: 'application/json',
+                detectionType: 'DETECTED',
+              },
+            ],
+            middleware: ['IsAuthenticatedOrReadOnly'],
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
     }
 
     return endpoints;
