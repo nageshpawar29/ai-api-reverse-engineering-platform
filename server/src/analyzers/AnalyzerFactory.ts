@@ -116,27 +116,25 @@ export class AnalyzerFactory {
       }
     }
 
-    // Universal Heuristic & AST Fallback: If 0 endpoints OR 0 models found, or to catch Next.js/SQL
-    if (aggregatedResult.endpoints.length === 0 || aggregatedResult.models.length === 0) {
-      try {
-        const universal = new UniversalAnalyzer();
-        const uniRes = await universal.analyze(projectDir, projectId);
-        for (const ep of uniRes.endpoints) {
-          if (!aggregatedResult.endpoints.some((e) => e.method === ep.method && e.path === ep.path)) {
-            aggregatedResult.endpoints.push(ep);
-          }
+    // Universal Heuristic & AST Engine: Always runs to extract Next.js, client-side HTTP calls (fetch, axios), and universal routes
+    try {
+      const universal = new UniversalAnalyzer();
+      const uniRes = await universal.analyze(projectDir, projectId);
+      for (const ep of uniRes.endpoints) {
+        if (!aggregatedResult.endpoints.some((e) => e.method === ep.method && e.path === ep.path)) {
+          aggregatedResult.endpoints.push(ep);
         }
-        for (const m of uniRes.models) {
-          if (!aggregatedResult.models.some((em) => em.name.toLowerCase() === m.name.toLowerCase())) {
-            aggregatedResult.models.push(m);
-          }
-        }
-        aggregatedResult.dependencies.push(...uniRes.dependencies);
-        aggregatedResult.securityFindings.push(...uniRes.securityFindings);
-        aggregatedResult.fileCount = Math.max(aggregatedResult.fileCount, uniRes.fileCount);
-      } catch (err) {
-        console.warn('Universal analyzer error:', err);
       }
+      for (const m of uniRes.models) {
+        if (!aggregatedResult.models.some((em) => em.name.toLowerCase() === m.name.toLowerCase())) {
+          aggregatedResult.models.push(m);
+        }
+      }
+      aggregatedResult.dependencies.push(...uniRes.dependencies);
+      aggregatedResult.securityFindings.push(...uniRes.securityFindings);
+      aggregatedResult.fileCount = Math.max(aggregatedResult.fileCount, uniRes.fileCount);
+    } catch (err) {
+      console.warn('Universal analyzer error:', err);
     }
 
     return aggregatedResult;

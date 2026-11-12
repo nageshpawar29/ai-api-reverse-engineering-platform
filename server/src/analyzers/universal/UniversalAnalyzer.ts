@@ -46,7 +46,7 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
           endpoints.push(...fileEndpoints);
         }
 
-        // 2. Universal Method Invocation Routes: router.get('/path', ...), app.post('/path', ...)
+        // 2. Universal Method & Route Invocations: router.get, Route::get, path(), app.MapGet
         const routerEndpoints = this.extractRouterInvocations(code, relativePath, projectId);
         for (const rep of routerEndpoints) {
           if (!endpoints.some((e) => e.method === rep.method && e.path === rep.path)) {
@@ -54,7 +54,15 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
           }
         }
 
-        // 3. Universal Decorator Routes: @app.get('/path'), @router.post('/path'), @GetMapping('/path')
+        // 3. Client-Side HTTP & Invocation Reverse Engineering (fetch, axios, requests, client, $.ajax)
+        const clientEndpoints = this.extractClientHttpInvocations(code, relativePath, projectId);
+        for (const cep of clientEndpoints) {
+          if (!endpoints.some((e) => e.method === cep.method && e.path === cep.path)) {
+            endpoints.push(cep);
+          }
+        }
+
+        // 4. Universal Decorator Routes: @app.get('/path'), @router.post('/path'), @GetMapping('/path')
         const decoratorEndpoints = this.extractDecoratorRoutes(code, relativePath, projectId);
         for (const dep of decoratorEndpoints) {
           if (!endpoints.some((e) => e.method === dep.method && e.path === dep.path)) {
@@ -62,7 +70,15 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
           }
         }
 
-        // 4. SQL DDL Table Extraction (CREATE TABLE ...)
+        // 5. Frontend & UI Action Handler Extraction (interactive event-bound handlers)
+        const actionEndpoints = this.extractFrontendActionHandlers(code, relativePath, projectId);
+        for (const aep of actionEndpoints) {
+          if (!endpoints.some((e) => e.method === aep.method && e.path === aep.path)) {
+            endpoints.push(aep);
+          }
+        }
+
+        // 6. SQL DDL Table Extraction (CREATE TABLE ...)
         if (ext === '.sql' || code.includes('CREATE TABLE')) {
           const sqlModels = this.extractSqlTables(code, relativePath, projectId);
           for (const sm of sqlModels) {
@@ -207,23 +223,33 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
 
   private extractRouterInvocations(code: string, relativePath: string, projectId: string): ApiEndpoint[] {
     const endpoints: ApiEndpoint[] = [];
-    // e.g. router.get('/users', ...), app.post('/api/v1/auth', ...)
-    const regex = /(?:router|app|server|api|r|v1|v2|route|group)\.(get|post|put|patch|delete|options|head)\s*\(\s*['"`]([\/a-zA-Z0-9_\-:{}\$]+)['"`]/gi;
-    let match;
+    const authRequired =
+      code.includes('auth') ||
+      code.includes('jwt') ||
+      code.includes('bearer') ||
+      code.includes('protect') ||
+      code.includes('guard');
 
-    while ((match = regex.exec(code)) !== null) {
+    // 1. Standard Express / Fastify / Koa / Router / Hono: router.get('/users', ...), app.post('/api', ...)
+    const routerRegex = /(?:router|app|server|api|r|v1|v2|route|group)\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*([`'"][^`'"]+[`'"]|`[^`]+`)/gi;
+    let match;
+    while ((match = routerRegex.exec(code)) !== null) {
       const method = match[1].toUpperCase() as HttpMethod;
       const rawPath = match[2];
-      const cleanPath = '/' + rawPath.replace(/^\//, '');
+      const { cleanPath, pathParams } = this.resolveAndNormalizePath(rawPath, code);
 
-      if (cleanPath.includes('$')) continue;
+      if (!cleanPath || cleanPath === '/') continue;
 
-      const authRequired =
-        code.includes('auth') ||
-        code.includes('jwt') ||
-        code.includes('bearer') ||
-        code.includes('protect') ||
-        code.includes('guard');
+      const parameters: ApiParameter[] = pathParams.map((p) => ({
+        id: `param-${uuidv4().substring(0, 8)}`,
+        endpointId: '',
+        name: p,
+        paramIn: 'path',
+        dataType: 'string',
+        required: true,
+        description: `URL path parameter: ${p}`,
+        detectionType: 'DETECTED',
+      }));
 
       endpoints.push({
         id: `ep-uni-${uuidv4().substring(0, 8)}`,
@@ -232,17 +258,17 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
         path: cleanPath,
         summary: `${method} ${cleanPath}`,
         description: `Discovered endpoint in ${relativePath}`,
-        controllerName: path.basename(relativePath),
+        controllerName: path.basename(relativePath, path.extname(relativePath)),
         handlerFunction: method.toLowerCase(),
         sourceFile: relativePath,
         lineStart: 1,
-        lineEnd: 20,
+        lineEnd: 25,
         authRequired,
         authType: authRequired ? 'bearer' : 'none',
         middleware: authRequired ? ['authGuard'] : [],
         detectionType: 'DETECTED',
-        confidenceScore: 0.92,
-        parameters: [],
+        confidenceScore: 0.94,
+        parameters,
         responses: [
           {
             id: `res-${uuidv4().substring(0, 8)}`,
@@ -257,7 +283,536 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
       });
     }
 
+    // 2. Laravel Route Facade: Route::get('/path', ...), Route::post('/path', ...), Route::apiResource('users', ...)
+    const laravelRegex = /Route\s*::\s*(get|post|put|patch|delete|options|resource|apiResource)\s*\(\s*['"]([^'"]+)['"]/gi;
+    let lmatch;
+    while ((lmatch = laravelRegex.exec(code)) !== null) {
+      const verb = lmatch[1].toLowerCase();
+      const rawPath = lmatch[2];
+      const { cleanPath } = this.resolveAndNormalizePath(rawPath, code);
+
+      if (verb === 'resource' || verb === 'apiresource') {
+        const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE'];
+        for (const m of methods) {
+          const resPath = m === 'GET' || m === 'POST' ? cleanPath : `${cleanPath}/:id`;
+          endpoints.push({
+            id: `ep-lar-${uuidv4().substring(0, 8)}`,
+            projectId,
+            method: m,
+            path: resPath,
+            summary: `${m} ${resPath}`,
+            description: `Laravel Resource Endpoint in ${relativePath}`,
+            controllerName: path.basename(relativePath),
+            handlerFunction: m.toLowerCase(),
+            sourceFile: relativePath,
+            lineStart: 1,
+            lineEnd: 20,
+            authRequired: code.includes('auth'),
+            authType: code.includes('auth') ? 'bearer' : 'none',
+            middleware: [],
+            detectionType: 'DETECTED',
+            confidenceScore: 0.95,
+            parameters: m !== 'GET' && m !== 'POST' ? [
+              {
+                id: `param-${uuidv4().substring(0, 8)}`,
+                endpointId: '',
+                name: 'id',
+                paramIn: 'path',
+                dataType: 'string',
+                required: true,
+                description: 'Resource ID',
+                detectionType: 'DETECTED',
+              },
+            ] : [],
+            responses: [{
+              id: `res-${uuidv4().substring(0, 8)}`,
+              endpointId: '',
+              statusCode: m === 'POST' ? 201 : 200,
+              description: 'Resource output',
+              contentType: 'application/json',
+              detectionType: 'DETECTED',
+            }],
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } else {
+        const method = verb.toUpperCase() as HttpMethod;
+        endpoints.push({
+          id: `ep-lar-${uuidv4().substring(0, 8)}`,
+          projectId,
+          method,
+          path: cleanPath,
+          summary: `${method} ${cleanPath}`,
+          description: `Laravel route in ${relativePath}`,
+          controllerName: path.basename(relativePath),
+          handlerFunction: method.toLowerCase(),
+          sourceFile: relativePath,
+          lineStart: 1,
+          lineEnd: 20,
+          authRequired: code.includes('auth'),
+          authType: code.includes('auth') ? 'bearer' : 'none',
+          middleware: [],
+          detectionType: 'DETECTED',
+          confidenceScore: 0.95,
+          parameters: [],
+          responses: [{
+            id: `res-${uuidv4().substring(0, 8)}`,
+            endpointId: '',
+            statusCode: method === 'POST' ? 201 : 200,
+            description: 'API output',
+            contentType: 'application/json',
+            detectionType: 'DETECTED',
+          }],
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    // 3. Django URLs: path('users/', view), re_path('^api/items/', view)
+    const djangoRegex = /(?:path|re_path|url)\s*\(\s*['"]([^'"]+)['"]/g;
+    let dmatch;
+    while ((dmatch = djangoRegex.exec(code)) !== null) {
+      const raw = dmatch[1];
+      if (raw.endsWith('.css') || raw.endsWith('.js') || raw.startsWith('admin')) continue;
+      const { cleanPath, pathParams } = this.resolveAndNormalizePath(raw, code);
+      if (cleanPath === '/') continue;
+
+      endpoints.push({
+        id: `ep-dj-${uuidv4().substring(0, 8)}`,
+        projectId,
+        method: 'GET',
+        path: cleanPath,
+        summary: `GET ${cleanPath}`,
+        description: `Django URL pattern in ${relativePath}`,
+        controllerName: path.basename(relativePath),
+        handlerFunction: 'view',
+        sourceFile: relativePath,
+        lineStart: 1,
+        lineEnd: 15,
+        authRequired: code.includes('login_required') || code.includes('permission_classes'),
+        authType: 'none',
+        middleware: [],
+        detectionType: 'DETECTED',
+        confidenceScore: 0.91,
+        parameters: pathParams.map((p) => ({
+          id: `param-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          name: p,
+          paramIn: 'path',
+          dataType: 'string',
+          required: true,
+          description: `URL path parameter: ${p}`,
+          detectionType: 'DETECTED',
+        })),
+        responses: [{
+          id: `res-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          statusCode: 200,
+          description: 'Django view response',
+          contentType: 'application/json',
+          detectionType: 'DETECTED',
+        }],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // 4. ASP.NET Core Minimal APIs: app.MapGet("/todos", ...), app.MapPost(...)
+    const dotnetRegex = /(?:app|routes)\s*\.\s*(?:MapGet|MapPost|MapPut|MapDelete)\s*\(\s*['"]([^'"]+)['"]/gi;
+    let nmatch;
+    while ((nmatch = dotnetRegex.exec(code)) !== null) {
+      const raw = nmatch[1];
+      const matchMethod = nmatch[0].includes('MapPost')
+        ? 'POST'
+        : nmatch[0].includes('MapPut')
+        ? 'PUT'
+        : nmatch[0].includes('MapDelete')
+        ? 'DELETE'
+        : 'GET';
+      const { cleanPath, pathParams } = this.resolveAndNormalizePath(raw, code);
+
+      endpoints.push({
+        id: `ep-cs-${uuidv4().substring(0, 8)}`,
+        projectId,
+        method: matchMethod as HttpMethod,
+        path: cleanPath,
+        summary: `${matchMethod} ${cleanPath}`,
+        description: `ASP.NET Core Minimal API endpoint in ${relativePath}`,
+        controllerName: path.basename(relativePath),
+        handlerFunction: matchMethod.toLowerCase(),
+        sourceFile: relativePath,
+        lineStart: 1,
+        lineEnd: 20,
+        authRequired: code.includes('RequireAuthorization'),
+        authType: code.includes('RequireAuthorization') ? 'bearer' : 'none',
+        middleware: [],
+        detectionType: 'DETECTED',
+        confidenceScore: 0.95,
+        parameters: pathParams.map((p) => ({
+          id: `param-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          name: p,
+          paramIn: 'path',
+          dataType: 'string',
+          required: true,
+          description: `Path param: ${p}`,
+          detectionType: 'DETECTED',
+        })),
+        responses: [{
+          id: `res-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          statusCode: matchMethod === 'POST' ? 201 : 200,
+          description: 'Output',
+          contentType: 'application/json',
+          detectionType: 'DETECTED',
+        }],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
     return endpoints;
+  }
+
+  /**
+   * Client-Side HTTP & Invocation Reverse Engineering:
+   * Scans client scripts, frontends, and API SDK consumers for fetch, axios, requests, client.get, etc.
+   */
+  private extractClientHttpInvocations(
+    code: string,
+    relativePath: string,
+    projectId: string
+  ): ApiEndpoint[] {
+    const endpoints: ApiEndpoint[] = [];
+
+    // Pattern 1: fetch(url, options)
+    const fetchRegex = /fetch\s*\(\s*([`'"][^`'"]+[`'"]|`[^`]+`)(?:\s*,\s*(\{[\s\S]*?\}|[a-zA-Z0-9_]+))?\s*\)/g;
+    let fmatch;
+    while ((fmatch = fetchRegex.exec(code)) !== null) {
+      const rawUrl = fmatch[1];
+      const optStr = fmatch[2] || '';
+      let method: HttpMethod = 'GET';
+
+      if (optStr) {
+        const methodMatch = optStr.match(/method\s*:\s*['"](GET|POST|PUT|DELETE|PATCH)['"]/i);
+        if (methodMatch) method = methodMatch[1].toUpperCase() as HttpMethod;
+        else if (optStr.includes('POST') || optStr.includes('body:')) method = 'POST';
+      }
+
+      const { cleanPath, serviceDomain, pathParams } = this.resolveAndNormalizePath(rawUrl, code);
+      if (!cleanPath || cleanPath === '/' || cleanPath.endsWith('.svg') || cleanPath.endsWith('.png') || cleanPath.endsWith('.css')) continue;
+
+      const parameters: ApiParameter[] = pathParams.map((p) => ({
+        id: `param-${uuidv4().substring(0, 8)}`,
+        endpointId: '',
+        name: p,
+        paramIn: 'path',
+        dataType: 'string',
+        required: true,
+        description: `Path parameter: ${p}`,
+        detectionType: 'DETECTED',
+      }));
+
+      // Extract body parameters if JSON.stringify({ ... }) was passed
+      const bodyMatch = optStr.match(/body\s*:\s*(?:JSON\.stringify\s*\(\s*)?\{([^}]+)\}/);
+      if (bodyMatch) {
+        const fields = bodyMatch[1].split(',');
+        for (const f of fields) {
+          const fname = f.split(':')[0].trim().replace(/['"]/g, '');
+          if (fname && !parameters.some((p) => p.name === fname)) {
+            parameters.push({
+              id: `param-${uuidv4().substring(0, 8)}`,
+              endpointId: '',
+              name: fname,
+              paramIn: 'body',
+              dataType: 'string',
+              required: true,
+              description: `Request payload field: ${fname}`,
+              detectionType: 'DETECTED',
+            });
+          }
+        }
+      }
+
+      const domainTag = serviceDomain ? ` [${serviceDomain}]` : '';
+      endpoints.push({
+        id: `ep-cli-${uuidv4().substring(0, 8)}`,
+        projectId,
+        method,
+        path: cleanPath,
+        summary: `${method} ${cleanPath}${domainTag}`,
+        description: `Reverse-engineered API invocation via fetch() in ${relativePath}`,
+        controllerName: path.basename(relativePath, path.extname(relativePath)),
+        handlerFunction: 'fetchRequest',
+        sourceFile: relativePath,
+        lineStart: 1,
+        lineEnd: 20,
+        authRequired: optStr.includes('Bearer') || optStr.includes('Authorization') || optStr.includes('token'),
+        authType: 'none',
+        middleware: [],
+        detectionType: 'DETECTED',
+        confidenceScore: 0.93,
+        parameters,
+        responses: [{
+          id: `res-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          statusCode: method === 'POST' ? 201 : 200,
+          description: 'Client invocation response',
+          contentType: 'application/json',
+          detectionType: 'DETECTED',
+        }],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Pattern 2: (axios|requests|client|api|http|agent).(get|post|put|delete|patch)(url, data, config)
+    const clientRegex = /(?:axios|requests|client|api|http|agent)\s*\.\s*(get|post|put|delete|patch)\s*(?:<[^>]+>)?\s*\(\s*([`'"][^`'"]+[`'"]|`[^`]+`)(?:\s*,\s*(\{[\s\S]*?\}|[a-zA-Z0-9_]+))?/gi;
+    let cmatch;
+    while ((cmatch = clientRegex.exec(code)) !== null) {
+      const method = cmatch[1].toUpperCase() as HttpMethod;
+      const rawUrl = cmatch[2];
+      const dataStr = cmatch[3] || '';
+
+      const { cleanPath, serviceDomain, pathParams } = this.resolveAndNormalizePath(rawUrl, code);
+      if (!cleanPath || cleanPath === '/' || cleanPath.endsWith('.svg') || cleanPath.endsWith('.png') || cleanPath.endsWith('.css')) continue;
+
+      const parameters: ApiParameter[] = pathParams.map((p) => ({
+        id: `param-${uuidv4().substring(0, 8)}`,
+        endpointId: '',
+        name: p,
+        paramIn: 'path',
+        dataType: 'string',
+        required: true,
+        description: `URL path param: ${p}`,
+        detectionType: 'DETECTED',
+      }));
+
+      // Extract body payload variables
+      if (['POST', 'PUT', 'PATCH'].includes(method) && dataStr) {
+        if (dataStr.startsWith('{') && dataStr.endsWith('}')) {
+          const bodyFields = dataStr.slice(1, -1).split(',');
+          for (const bf of bodyFields) {
+            const bname = bf.split(':')[0].trim().replace(/['"]/g, '');
+            if (bname && !parameters.some((p) => p.name === bname)) {
+              parameters.push({
+                id: `param-${uuidv4().substring(0, 8)}`,
+                endpointId: '',
+                name: bname,
+                paramIn: 'body',
+                dataType: 'string',
+                required: true,
+                description: `Request payload field: ${bname}`,
+                detectionType: 'DETECTED',
+              });
+            }
+          }
+        } else if (/^[a-zA-Z0-9_]+$/.test(dataStr.trim())) {
+          parameters.push({
+            id: `param-${uuidv4().substring(0, 8)}`,
+            endpointId: '',
+            name: dataStr.trim(),
+            paramIn: 'body',
+            dataType: 'object',
+            required: true,
+            description: `Request body payload object: ${dataStr.trim()}`,
+            detectionType: 'DETECTED',
+          });
+        }
+      }
+
+      const domainTag = serviceDomain ? ` [${serviceDomain}]` : '';
+      endpoints.push({
+        id: `ep-cli-${uuidv4().substring(0, 8)}`,
+        projectId,
+        method,
+        path: cleanPath,
+        summary: `${method} ${cleanPath}${domainTag}`,
+        description: `Reverse-engineered client-side HTTP invocation in ${relativePath}`,
+        controllerName: path.basename(relativePath, path.extname(relativePath)),
+        handlerFunction: method.toLowerCase(),
+        sourceFile: relativePath,
+        lineStart: 1,
+        lineEnd: 25,
+        authRequired: code.includes('Bearer') || code.includes('Authorization'),
+        authType: 'none',
+        middleware: [],
+        detectionType: 'DETECTED',
+        confidenceScore: 0.94,
+        parameters,
+        responses: [{
+          id: `res-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          statusCode: method === 'POST' ? 201 : 200,
+          description: 'Execution response',
+          contentType: 'application/json',
+          detectionType: 'DETECTED',
+        }],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return endpoints;
+  }
+
+  /**
+   * Frontend and UI Action Handler Extraction:
+   * Reverse-engineers action functions (convertCurrency, swapCurrencies, submitOrder) into interactive REST endpoints.
+   */
+  private extractFrontendActionHandlers(
+    code: string,
+    relativePath: string,
+    projectId: string
+  ): ApiEndpoint[] {
+    const endpoints: ApiEndpoint[] = [];
+    const baseName = path.basename(relativePath, path.extname(relativePath));
+
+    // Match interactive action functions
+    const fnRegex = /(?:async\s+function|function|const)\s+([a-zA-Z0-9_]+)\s*(?:=\s*async\s*\(|\s*\()([^)]*)\)/g;
+    let match;
+
+    while ((match = fnRegex.exec(code)) !== null) {
+      const fnName = match[1];
+      const rawParams = match[2];
+
+      const lower = fnName.toLowerCase();
+      // Check for user-facing action keywords
+      const isAction =
+        lower.includes('convert') ||
+        lower.includes('swap') ||
+        lower.includes('calc') ||
+        lower.includes('submit') ||
+        lower.includes('checkout') ||
+        lower.includes('order') ||
+        lower.includes('payment') ||
+        lower.includes('upload') ||
+        lower.includes('query') ||
+        lower.includes('search') ||
+        lower.includes('auth') ||
+        lower.includes('login') ||
+        lower.includes('register');
+
+      if (!isAction || fnName.startsWith('_')) continue;
+
+      // Ensure it is bound to an event or exported
+      const isBound =
+        code.includes(fnName + '(') ||
+        code.includes(fnName + ',') ||
+        code.includes(`"${fnName}"`) ||
+        code.includes(`'${fnName}'`) ||
+        code.includes('addEventListener') ||
+        code.includes('onClick') ||
+        code.includes('onSubmit') ||
+        code.includes('export');
+
+      if (!isBound) continue;
+
+      const kebab = fnName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+      const routePath = `/api/action/${kebab}`;
+
+      const parameters: ApiParameter[] = [];
+      if (rawParams) {
+        const params = rawParams.split(',');
+        for (const p of params) {
+          const pname = p.split(':')[0].split('=')[0].trim();
+          if (pname && pname !== 'e' && pname !== 'event' && !pname.startsWith('*')) {
+            parameters.push({
+              id: `param-${uuidv4().substring(0, 8)}`,
+              endpointId: '',
+              name: pname,
+              paramIn: 'body',
+              dataType: 'string',
+              required: true,
+              description: `Action parameter: ${pname}`,
+              detectionType: 'DETECTED',
+            });
+          }
+        }
+      }
+
+      endpoints.push({
+        id: `ep-act-${uuidv4().substring(0, 8)}`,
+        projectId,
+        method: 'POST',
+        path: routePath,
+        summary: `POST ${routePath}`,
+        description: `Frontend action handler reverse-engineered from ${baseName}.${fnName}()`,
+        controllerName: baseName,
+        handlerFunction: fnName,
+        sourceFile: relativePath,
+        lineStart: 1,
+        lineEnd: 20,
+        authRequired: false,
+        authType: 'none',
+        middleware: [],
+        detectionType: 'DETECTED',
+        confidenceScore: 0.89,
+        parameters,
+        responses: [{
+          id: `res-${uuidv4().substring(0, 8)}`,
+          endpointId: '',
+          statusCode: 200,
+          description: 'Action execution result',
+          contentType: 'application/json',
+          detectionType: 'DETECTED',
+        }],
+        createdAt: new Date().toISOString(),
+      });
+
+      if (endpoints.length >= 6) break;
+    }
+
+    return endpoints;
+  }
+
+  /**
+   * Resolves constants and normalizes raw URLs into clean route paths with path parameters
+   */
+  private resolveAndNormalizePath(
+    rawPath: string,
+    code: string
+  ): { cleanPath: string; serviceDomain?: string; pathParams: string[] } {
+    const constMap = new Map<string, string>();
+    const constRegex = /(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*[`\x27\x22]([^`\x27\x22]+)[`\x27\x22]/g;
+    let cm;
+    while ((cm = constRegex.exec(code)) !== null) {
+      constMap.set(cm[1], cm[2]);
+    }
+
+    let replaced = rawPath.replace(/^[`\x27\x22]/, '').replace(/[`\x27\x22]$/, '');
+    for (const [k, v] of constMap.entries()) {
+      if (k.toLowerCase().includes('url') || k.toLowerCase().includes('host') || k.toLowerCase().includes('domain') || k.toLowerCase().includes('api')) {
+        replaced = replaced.split(`\${${k}}`).join(v);
+      }
+    }
+
+    // Convert ${var} and [var] to :var
+    let pathStr = replaced.replace(/\$\{([a-zA-Z0-9_]+)\}/g, ':$1');
+    pathStr = pathStr.replace(/\[([a-zA-Z0-9_]+)\]/g, ':$1');
+
+    let serviceDomain: string | undefined = undefined;
+    if (pathStr.startsWith('http://') || pathStr.startsWith('https://')) {
+      try {
+        const parsed = new URL(pathStr);
+        serviceDomain = parsed.hostname;
+        pathStr = parsed.pathname;
+      } catch (e) {
+        pathStr = pathStr.replace(/^https?:\/\/[^\/]+/, '');
+      }
+    }
+
+    // Strip placeholder base prefixes e.g. /:apiUrl/products -> /products
+    pathStr = pathStr.replace(/^\/:(?:api_?url|base_?url|endpoint|server|host|url|api)\b/i, '');
+    pathStr = pathStr.replace(/\/+/g, '/');
+    if (!pathStr.startsWith('/')) pathStr = '/' + pathStr;
+    pathStr = pathStr.replace(/\/$/, '') || '/';
+
+    const pathParams: string[] = [];
+    const paramMatches = pathStr.matchAll(/:([a-zA-Z0-9_]+)/g);
+    for (const pm of paramMatches) {
+      if (!pathParams.includes(pm[1])) {
+        pathParams.push(pm[1]);
+      }
+    }
+
+    return { cleanPath: pathStr, serviceDomain, pathParams };
   }
 
   private extractDecoratorRoutes(code: string, relativePath: string, projectId: string): ApiEndpoint[] {
