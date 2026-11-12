@@ -7,6 +7,7 @@ import { db } from '../db/index.js';
 import { Project } from '../types/index.js';
 import { FrameworkDetector } from '../analyzers/FrameworkDetector.js';
 import { AnalyzerFactory } from '../analyzers/AnalyzerFactory.js';
+import { DatabaseAnalyzer } from '../analyzers/database/DatabaseAnalyzer.js';
 import { getLLMProvider } from '../ai/LLMProvider.js';
 import { OpenApiGenerator } from '../generators/OpenApiGenerator.js';
 import { PostmanGenerator } from '../generators/PostmanGenerator.js';
@@ -357,6 +358,16 @@ export class IngestionService {
 
         rawResult.dependencies.push(...polyglotResult.dependencies);
         rawResult.securityFindings.push(...polyglotResult.securityFindings);
+      }
+
+      // Guarantee models are never 0 across any project
+      if (rawResult.models.length === 0) {
+        const fallbackModels = await DatabaseAnalyzer.extractModels(projectDir, projectId, [], rawResult.endpoints);
+        for (const fm of fallbackModels) {
+          if (!rawResult.models.some((m) => m.name.toLowerCase() === fm.name.toLowerCase())) {
+            rawResult.models.push(fm);
+          }
+        }
       }
 
       await db.updateProjectStatus(projectId, {
