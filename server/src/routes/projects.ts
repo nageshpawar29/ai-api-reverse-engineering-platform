@@ -64,6 +64,27 @@ projectsRouter.post('/:id/auto-repair', async (req: Request, res: Response, next
   }
 });
 
+// POST /api/projects/:id/deep-analyze - feature requested by user: full-codebase deep scan & reverse-engineering
+projectsRouter.post('/:id/deep-analyze', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = req.params.id as string;
+    const project = await db.getProject(projectId);
+    if (!project) throw new AppError('Project not found', 404);
+
+    if (project.storagePath && fs.existsSync(project.storagePath)) {
+      await IngestionService.runAnalysisPipeline(project.id, project.storagePath);
+    }
+
+    const analysis = await db.getProjectAnalysis(projectId);
+    res.json({
+      message: 'Full project deep analysis completed successfully',
+      analysis,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/projects - create new project manually or initialize metadata
 projectsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
