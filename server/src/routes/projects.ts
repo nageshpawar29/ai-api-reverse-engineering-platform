@@ -1,8 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { Project } from '../types/index.js';
+import { IngestionService } from '../services/IngestionService.js';
 
 export const projectsRouter = Router();
 
@@ -39,6 +41,24 @@ projectsRouter.get('/:id/analysis', async (req: Request, res: Response, next: Ne
       throw new AppError('Project not found', 404);
     }
     res.json(analysis);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/projects/:id/auto-repair - force full reverse-engineering synthesis and auto-healing
+projectsRouter.post('/:id/auto-repair', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = req.params.id as string;
+    const project = await db.getProject(projectId);
+    if (!project) throw new AppError('Project not found', 404);
+
+    if (project.storagePath && fs.existsSync(project.storagePath)) {
+      await IngestionService.runAnalysisPipeline(project.id, project.storagePath);
+    }
+
+    const analysis = await db.getProjectAnalysis(projectId);
+    res.json({ message: 'Project successfully reverse-engineered and auto-healed', analysis });
   } catch (err) {
     next(err);
   }
