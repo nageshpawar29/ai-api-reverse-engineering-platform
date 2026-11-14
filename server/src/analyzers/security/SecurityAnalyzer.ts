@@ -8,11 +8,11 @@ export class SecurityAnalyzer {
     projectDir: string,
     projectId: string,
     endpoints: ApiEndpoint[],
-    allFiles: string[]
+    allFiles: string[] = []
   ): Promise<SecurityFinding[]> {
     const findings: SecurityFinding[] = [];
 
-    // 1. Missing Authentication on Sensitive Routes
+    // 1. Missing Authentication on State-Modifying or Sensitive Routes
     const sensitivePathPatterns = [
       /users?(\/|$)/i,
       /admin(\/|$)/i,
@@ -20,54 +20,58 @@ export class SecurityAnalyzer {
       /payments?(\/|$)/i,
       /accounts?(\/|$)/i,
       /settings?(\/|$)/i,
+      /profile(\/|$)/i,
+      /dashboard(\/|$)/i,
     ];
 
     for (const ep of endpoints) {
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(ep.method)) {
-        const isAuthRoute = ep.path.includes('/login') || ep.path.includes('/register') || ep.path.includes('/signup');
-        if (!isAuthRoute && !ep.authRequired) {
-          const isSensitive = sensitivePathPatterns.some((pattern) => pattern.test(ep.path));
-          if (isSensitive) {
-            findings.push({
-              id: `sec-${uuidv4().substring(0, 8)}`,
-              projectId,
-              endpointId: ep.id,
-              severity: 'high',
-              category: 'Broken Authentication',
-              title: `Unprotected Sensitive State-Modifying Endpoint: ${ep.method} ${ep.path}`,
-              description: `The endpoint ${ep.method} ${ep.path} modifies application state or manages sensitive resources but does not enforce authentication middleware in its route chain.`,
-              sourceFile: ep.sourceFile,
-              lineNumber: ep.lineStart,
-              recommendation:
-                'Apply authentication middleware (e.g. requireAuth or JWT verification) before executing controller handlers for this route.',
-              detectionType: 'DETECTED',
-              createdAt: new Date().toISOString(),
-            });
-          }
+        const isPublicAuthAction =
+          ep.path.endsWith('/login') ||
+          ep.path.endsWith('/register') ||
+          ep.path.endsWith('/signup') ||
+          ep.path.endsWith('/health');
+
+        if (!isPublicAuthAction && !ep.authRequired) {
+          findings.push({
+            id: `sec-${uuidv4().substring(0, 8)}`,
+            projectId,
+            endpointId: ep.id,
+            severity: 'high',
+            category: 'Broken Authentication',
+            title: `State-Modifying Operation Lacks Authentication: ${ep.method} ${ep.path}`,
+            description: `The endpoint ${ep.method} ${ep.path} modifies application data without enforcing an authentication guard (JWT/Bearer/Session) in its route middleware chain.`,
+            sourceFile: ep.sourceFile,
+            lineNumber: ep.lineStart || 1,
+            recommendation:
+              'Apply authentication middleware (e.g. requireAuth, verifyToken, or JWT guard) before executing the route handler.',
+            detectionType: 'DETECTED',
+            createdAt: new Date().toISOString(),
+          });
         }
       }
 
-      // 2. Missing Input Validation on Endpoints with Request Bodies
+      // 2. Missing Input Validation on Endpoints with Request Payloads
       if (['POST', 'PUT', 'PATCH'].includes(ep.method)) {
-        const hasValidationMiddleware = ep.middleware.some((m) =>
+        const hasValidationMiddleware = (ep.middleware || []).some((m) =>
           ['validate', 'validation', 'check', 'validator', 'schema', 'zod', 'joi'].some((kw) =>
             m.toLowerCase().includes(kw)
           )
         );
 
-        if (!hasValidationMiddleware && ep.parameters.some((p) => p.paramIn === 'body')) {
+        if (!hasValidationMiddleware) {
           findings.push({
             id: `sec-${uuidv4().substring(0, 8)}`,
             projectId,
             endpointId: ep.id,
             severity: 'medium',
             category: 'Input Validation',
-            title: `Missing Schema Validation Middleware: ${ep.method} ${ep.path}`,
-            description: `Route receives payload parameters but does not bind a recognizable validation schema middleware (e.g. Zod, Joi, express-validator).`,
+            title: `Missing Schema Validation Guard: ${ep.method} ${ep.path}`,
+            description: `Endpoint receives client request data but does not bind a strict schema validation middleware (e.g. Zod, Joi, express-validator).`,
             sourceFile: ep.sourceFile,
-            lineNumber: ep.lineStart,
+            lineNumber: ep.lineStart || 1,
             recommendation:
-              'Bind a strict schema validation middleware (such as Zod or Joi) to reject malformed payloads before invoking business logic.',
+              'Bind a request body validation schema (such as Zod or Joi) to validate and sanitize parameters prior to business logic execution.',
             detectionType: 'DETECTED',
             createdAt: new Date().toISOString(),
           });
@@ -75,7 +79,80 @@ export class SecurityAnalyzer {
       }
     }
 
-    // 3. Scan Files for Hardcoded Secrets, Dangerous APIs, and SQL Injection Patterns
+    // 3. Global Architecture Security Audits (Helmet, CORS, Rate Limiting)
+    let hasHelmet = false;
+    let hasRateLimit = false;
+    let hasCors = false;
+    let hasWildcardCors = false;
+
+    for (const filePath of allFiles) {
+      try {
+        const code = fs.readFileSync(filePath, 'utf-8');
+        const lower = code.toLowerCase();
+
+        if (lower.includes('helmet')) hasHelmet = true;
+        if (lower.includes('rate-limit') || lower.includes('ratelimit')) hasRateLimit = true;
+        if (lower.includes('cors(') || lower.includes('cors:')) {
+          hasCors = true;
+          if (code.includes("origin: '*'") || code.includes('origin: "*"') || code.includes("origin: true")) {
+            hasWildcardCors = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Missing Helmet
+    if (!hasHelmet) {
+      findings.push({
+        id: `sec-helmet-${uuidv4().substring(0, 8)}`,
+        projectId,
+        severity: 'medium',
+        category: 'Security Headers',
+        title: 'Missing HTTP Security Headers (Helmet)',
+        description: 'The application does not appear to register Helmet middleware to set essential HTTP security headers (X-Content-Type-Options, Strict-Transport-Security, X-Frame-Options).',
+        sourceFile: 'server/app',
+        lineNumber: 1,
+        recommendation: 'Install and mount helmet middleware: `app.use(helmet())` at the top of your Express entry point.',
+        detectionType: 'DETECTED',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Missing Rate Limiting
+    if (!hasRateLimit) {
+      findings.push({
+        id: `sec-ratelimit-${uuidv4().substring(0, 8)}`,
+        projectId,
+        severity: 'medium',
+        category: 'Rate Limiting',
+        title: 'Missing Global API Rate Limiting Guard',
+        description: 'No global request rate limiting middleware was detected. Public API endpoints are susceptible to brute-force attacks and denial-of-service (DoS) bursts.',
+        sourceFile: 'server/app',
+        lineNumber: 1,
+        recommendation: 'Mount express-rate-limit middleware to restrict excessive automated requests per IP address.',
+        detectionType: 'DETECTED',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Wildcard CORS
+    if (hasWildcardCors) {
+      findings.push({
+        id: `sec-cors-${uuidv4().substring(0, 8)}`,
+        projectId,
+        severity: 'low',
+        category: 'CORS Configuration',
+        title: 'Overly Permissive Cross-Origin Resource Sharing (CORS)',
+        description: 'CORS configuration allows requests from wildcard origin (*). In production, cross-origin access should be restricted to trusted domains.',
+        sourceFile: 'server/cors',
+        lineNumber: 1,
+        recommendation: 'Configure CORS with an explicit whitelist array of allowed client origins.',
+        detectionType: 'DETECTED',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // 4. Code Pattern Scans: Hardcoded Secrets, Dangerous APIs, SQL Injection
     for (const filePath of allFiles) {
       try {
         const code = fs.readFileSync(filePath, 'utf-8');

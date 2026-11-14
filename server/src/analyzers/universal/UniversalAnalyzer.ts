@@ -238,7 +238,17 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
       const rawPath = match[2];
       const { cleanPath, pathParams } = this.resolveAndNormalizePath(rawPath, code);
 
-      if (!cleanPath || cleanPath === '/') continue;
+      let targetPath = cleanPath;
+      if (!targetPath || targetPath === '/') {
+        const fileBase = path.basename(relativePath, path.extname(relativePath))
+          .replace(/routes?$/i, '')
+          .replace(/controller$/i, '');
+        if (fileBase && fileBase !== 'index' && fileBase !== 'app' && fileBase !== 'server') {
+          targetPath = `/api/${fileBase.toLowerCase()}`;
+        } else {
+          targetPath = '/api';
+        }
+      }
 
       const parameters: ApiParameter[] = pathParams.map((p) => ({
         id: `param-${uuidv4().substring(0, 8)}`,
@@ -255,8 +265,8 @@ export class UniversalAnalyzer implements FrameworkAnalyzer {
         id: `ep-uni-${uuidv4().substring(0, 8)}`,
         projectId,
         method,
-        path: cleanPath,
-        summary: `${method} ${cleanPath}`,
+        path: targetPath,
+        summary: `${method} ${targetPath}`,
         description: `Discovered endpoint in ${relativePath}`,
         controllerName: path.basename(relativePath, path.extname(relativePath)),
         handlerFunction: method.toLowerCase(),

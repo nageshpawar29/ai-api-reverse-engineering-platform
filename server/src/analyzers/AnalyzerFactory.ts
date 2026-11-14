@@ -80,6 +80,7 @@ export class AnalyzerFactory {
       new DotNetAnalyzer(),
       new RubyAnalyzer(),
       new RustAnalyzer(),
+      new UniversalAnalyzer(),
     ];
 
     const aggregatedResult: AnalysisEngineResult = {
