@@ -881,6 +881,97 @@ export class DatabaseManager {
     return this.localStore.chatMessages.filter((c) => c.projectId === projectId);
   }
 
+  // --- Export & Import Entire Store ---
+  public exportStore(): DatabaseStore {
+    return {
+      users: this.localStore.users || [],
+      projects: this.localStore.projects || [],
+      endpoints: this.localStore.endpoints || [],
+      models: this.localStore.models || [],
+      dependencies: this.localStore.dependencies || [],
+      securityFindings: this.localStore.securityFindings || [],
+      artifacts: this.localStore.artifacts || [],
+      chatMessages: this.localStore.chatMessages || [],
+    };
+  }
+
+  public async importStore(data: Partial<DatabaseStore>): Promise<number> {
+    if (!data || !Array.isArray(data.projects)) {
+      throw new Error('Invalid store format: "projects" array is required.');
+    }
+
+    // Merge projects
+    for (const p of data.projects) {
+      const idx = this.localStore.projects.findIndex((ep) => ep.id === p.id);
+      if (idx !== -1) {
+        this.localStore.projects[idx] = p;
+      } else {
+        this.localStore.projects.push(p);
+      }
+    }
+
+    // Merge endpoints
+    if (Array.isArray(data.endpoints)) {
+      for (const ep of data.endpoints) {
+        if (!this.localStore.endpoints.some((e) => e.id === ep.id)) {
+          this.localStore.endpoints.push(ep);
+        }
+      }
+    }
+
+    // Merge models
+    if (Array.isArray(data.models)) {
+      for (const m of data.models) {
+        if (!this.localStore.models.some((em) => em.id === m.id)) {
+          this.localStore.models.push(m);
+        }
+      }
+    }
+
+    // Merge security findings
+    if (Array.isArray(data.securityFindings)) {
+      for (const sf of data.securityFindings) {
+        if (!this.localStore.securityFindings.some((esf) => esf.id === sf.id)) {
+          this.localStore.securityFindings.push(sf);
+        }
+      }
+    }
+
+    // Merge dependencies
+    if (Array.isArray(data.dependencies)) {
+      for (const dep of data.dependencies) {
+        if (!this.localStore.dependencies.some((ed) => ed.id === dep.id)) {
+          this.localStore.dependencies.push(dep);
+        }
+      }
+    }
+
+    // Merge artifacts
+    if (Array.isArray(data.artifacts)) {
+      for (const art of data.artifacts) {
+        if (!this.localStore.artifacts.some((ea) => ea.id === art.id)) {
+          this.localStore.artifacts.push(art);
+        }
+      }
+    }
+
+    // Save to disk
+    this.saveLocalStore();
+
+    // If PostgreSQL is connected, sync all projects and records
+    if (this.isPostgresConnected && this.pgPool) {
+      try {
+        for (const proj of this.localStore.projects) {
+          await this.createProject(proj);
+        }
+      } catch (err: any) {
+        console.warn('PostgreSQL import store sync notice:', err.message);
+      }
+    }
+
+    return this.localStore.projects.length;
+  }
+
   // --- Full Project Analysis Aggregator ---
   public async getProjectAnalysis(projectId: string): Promise<ProjectAnalysis | null> {
     let project = await this.getProject(projectId);

@@ -18,8 +18,6 @@ build/
 # Storage uploads & temporary files
 storage/
 server/storage/
-data/platform_store.json
-server/data/platform_store.json
 
 # Logs
 npm-debug.log*

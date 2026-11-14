@@ -18,6 +18,34 @@ projectsRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
+// GET /api/projects/export-backup - export entire database store as downloadable JSON backup
+projectsRouter.get('/export-backup', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const store = db.exportStore();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="platform_store_backup_${new Date().toISOString().slice(0, 10)}.json"`
+    );
+    res.send(JSON.stringify(store, null, 2));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/projects/import-backup - restore entire database store from backup payload
+projectsRouter.post('/import-backup', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const totalProjects = await db.importStore(req.body);
+    res.json({
+      message: 'Database store successfully restored',
+      totalProjects,
+    });
+  } catch (err: any) {
+    next(new AppError(err.message || 'Failed to import store backup', 400));
+  }
+});
+
 // GET /api/projects/:id - get single project
 projectsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {

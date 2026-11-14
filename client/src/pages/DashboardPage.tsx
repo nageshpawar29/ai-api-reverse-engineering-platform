@@ -18,6 +18,8 @@ import {
   PlaySquare,
   Workflow,
   Cpu,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { Project } from '../types';
@@ -58,6 +60,24 @@ export const DashboardPage: React.FC = () => {
       setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (err: any) {
       alert('Failed to delete project: ' + (err.response?.data?.error?.message || err.message));
+    }
+  };
+
+  const handleExportBackup = () => {
+    window.open(`${apiClient.defaults.baseURL || '/api'}/projects/export-backup`, '_blank');
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      await apiClient.post('/projects/import-backup', parsed);
+      alert('Database store successfully restored!');
+      fetchProjects();
+    } catch (err: any) {
+      alert('Failed to import backup: ' + (err.response?.data?.error?.message || err.message));
     }
   };
 
@@ -109,7 +129,22 @@ export const DashboardPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleExportBackup}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold hover:text-white transition-all shadow-sm"
+              title="Download entire project database backup as JSON"
+            >
+              <Download className="h-4 w-4 text-indigo-400" />
+              <span>Backup Store</span>
+            </button>
+
+            <label className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold hover:text-white transition-all shadow-sm cursor-pointer">
+              <Upload className="h-4 w-4 text-emerald-400" />
+              <span>Restore Store</span>
+              <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
+            </label>
+
             <Link
               to="/projects/new"
               className="group relative inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
